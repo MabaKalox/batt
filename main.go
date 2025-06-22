@@ -21,6 +21,7 @@ func setupLogger() error {
 }
 
 func main() {
+	fmt.Println("Maba modified batt, v2.0!")
 	cmd := NewCommand()
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)

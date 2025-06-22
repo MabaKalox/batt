@@ -40,7 +40,7 @@ func setConfig(c *gin.Context) {
 	logrus.Infof("set config: %#v", cfg)
 
 	// Immediate single maintain loop, to avoid waiting for the next loop
-	maintainLoopForced()
+	maintainLoop()
 	c.IndentedJSON(http.StatusCreated, "ok")
 }
 
@@ -96,7 +96,7 @@ func setLimit(c *gin.Context) {
 	}
 
 	// Immediate single maintain loop, to avoid waiting for the next loop
-	maintainLoopForced()
+	maintainLoop()
 
 	c.IndentedJSON(http.StatusCreated, msg)
 }
@@ -118,27 +118,6 @@ func setPreventIdleSleep(c *gin.Context) {
 	}
 
 	logrus.Infof("set prevent idle sleep to %t", p)
-
-	c.IndentedJSON(http.StatusCreated, "ok")
-}
-
-func setDisableChargingPreSleep(c *gin.Context) {
-	var d bool
-	if err := c.BindJSON(&d); err != nil {
-		c.IndentedJSON(http.StatusBadRequest, err.Error())
-		_ = c.AbortWithError(http.StatusBadRequest, err)
-		return
-	}
-
-	config.DisableChargingPreSleep = d
-	if err := saveConfig(); err != nil {
-		logrus.Errorf("saveConfig failed: %v", err)
-		c.IndentedJSON(http.StatusInternalServerError, err.Error())
-		_ = c.AbortWithError(http.StatusInternalServerError, err)
-		return
-	}
-
-	logrus.Infof("set disable charging pre sleep to %t", d)
 
 	c.IndentedJSON(http.StatusCreated, "ok")
 }

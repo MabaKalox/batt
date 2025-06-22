@@ -15,22 +15,20 @@ type Config struct {
 	// batt will keep the battery charge around this limit. Note that if your
 	// current battery charge is higher than the limit, it will simply stop
 	// charging.
-	Limit                   int  `json:"limit"`
-	PreventIdleSleep        bool `json:"preventIdleSleep"`
-	DisableChargingPreSleep bool `json:"disableChargingPreSleep"`
-	AllowNonRootAccess      bool `json:"allowNonRootAccess"`
-	LowerLimitDelta         int  `json:"lowerLimitDelta"`
-	ControlMagSafeLED       bool `json:"controlMagSafeLED"`
+	Limit              int  `json:"limit"`
+	PreventIdleSleep   bool `json:"preventIdleSleep"`
+	AllowNonRootAccess bool `json:"allowNonRootAccess"`
+	LowerLimitDelta    int  `json:"lowerLimitDelta"`
+	ControlMagSafeLED  bool `json:"controlMagSafeLED"`
 }
 
 var (
 	configPath    = "/etc/batt.json"
 	defaultConfig = Config{
-		Limit:                   60,
-		PreventIdleSleep:        true,
-		DisableChargingPreSleep: true,
-		AllowNonRootAccess:      false,
-		LowerLimitDelta:         2,
+		Limit:              60,
+		PreventIdleSleep:   true,
+		AllowNonRootAccess: false,
+		LowerLimitDelta:    2,
 		// There are Macs without MagSafe LED. We only do checks when the user
 		// explicitly enables this feature. In the future, we might add a check
 		// that disables this feature if the Mac does not have a MagSafe LED.

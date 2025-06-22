@@ -58,7 +58,6 @@ Website: https://github.com/charlie0129/batt`,
 		NewVersionCommand(),
 		NewLimitCommand(),
 		NewDisableCommand(),
-		NewSetDisableChargingPreSleepCommand(),
 		NewSetPreventIdleSleepCommand(),
 		NewStatusCommand(),
 		NewAdapterCommand(),
@@ -209,59 +208,6 @@ However, this options does not prevent manual sleep (limitation of macOS). For e
 				}
 
 				logrus.Infof("successfully disabled idle sleep prevention")
-
-				return nil
-			},
-		},
-	)
-
-	return cmd
-}
-
-// NewSetDisableChargingPreSleepCommand .
-func NewSetDisableChargingPreSleepCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:     "disable-charging-pre-sleep",
-		Short:   "Set whether to disable charging before sleep if charge limit is enabled",
-		GroupID: gAdvanced,
-		Long: `Set whether to disable charging before sleep if charge limit is enabled.
-
-As described in preventing-idle-sleep, batt will be paused by macOS when your computer goes to sleep, and there is no way for batt to continue controlling battery charging. This option will disable charging just before sleep, so your computer will not overcharge during sleep, even if the battery charge is below the limit.`,
-	}
-
-	cmd.AddCommand(
-		&cobra.Command{
-			Use:   "enable",
-			Short: "Disable charging before sleep during a charging session",
-			RunE: func(_ *cobra.Command, _ []string) error {
-				ret, err := put("/disable-charging-pre-sleep", "true")
-				if err != nil {
-					return fmt.Errorf("failed to set disable charging pre sleep: %v", err)
-				}
-
-				if ret != "" {
-					logrus.Infof("daemon responded: %s", ret)
-				}
-
-				logrus.Infof("successfully enabled disable-charging-pre-sleep")
-
-				return nil
-			},
-		},
-		&cobra.Command{
-			Use:   "disable",
-			Short: "Do not disable charging before sleep during a charging session",
-			RunE: func(_ *cobra.Command, _ []string) error {
-				ret, err := put("/disable-charging-pre-sleep", "false")
-				if err != nil {
-					return fmt.Errorf("failed to set disable charging pre sleep: %v", err)
-				}
-
-				if ret != "" {
-					logrus.Infof("daemon responded: %s", ret)
-				}
-
-				logrus.Infof("successfully disabled disable-charging-pre-sleep")
 
 				return nil
 			},
@@ -488,7 +434,6 @@ func NewStatusCommand() *cobra.Command {
 				cmd.Printf("  Charge limit: %s\n", bold("100%% (batt disabled)"))
 			}
 			cmd.Printf("  Prevent idle-sleep when charging: %s\n", bool2Text(conf.PreventIdleSleep))
-			cmd.Printf("  Disable charging before sleep if charge limit is enabled: %s\n", bool2Text(conf.DisableChargingPreSleep))
 			cmd.Printf("  Allow non-root users to access the daemon: %s\n", bool2Text(conf.AllowNonRootAccess))
 			cmd.Printf("  Control MagSafe LED: %s\n", bool2Text(conf.ControlMagSafeLED))
 			return nil

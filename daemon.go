@@ -33,7 +33,6 @@ func setupRoutes() *gin.Engine {
 	router.PUT("/limit", setLimit)
 	router.PUT("/lower-limit-delta", setLowerLimitDelta)
 	router.PUT("/prevent-idle-sleep", setPreventIdleSleep)
-	router.PUT("/disable-charging-pre-sleep", setDisableChargingPreSleep)
 	router.PUT("/adapter", setAdapter)
 	router.GET("/adapter", getAdapter)
 	router.GET("/charging", getCharging)
@@ -119,6 +118,11 @@ func runDaemon() {
 		logrus.Fatal(err)
 	}
 
+	// Disable Charging, to allow maintainLoopInner start `caffeinate -s` if needed
+	if err := smcConn.DisableCharging(); err != nil {
+		logrus.Errorf("failed to disable charging at startup: %v", err)
+	}
+
 	go func() {
 		logrus.Debugln("main loop starts")
 
@@ -144,6 +148,14 @@ func runDaemon() {
 
 	logrus.Info("stopping listening notifications")
 	stopListeningNotifications()
+
+	if err := StopCaffeinate(); err != nil {
+		logrus.Errorf("failed to stop caffeinate before exiting: %v", err)
+	}
+
+	if err := smcConn.EnableCharging(); err != nil {
+		logrus.Errorf("failed to re-enable charging before exiting: %v", err)
+	}
 
 	logrus.Info("closing smc connection")
 	err = smcConn.Close()

@@ -8,21 +8,16 @@ import "C"
 
 import (
 	"fmt"
-	"time"
-
 	"github.com/sirupsen/logrus"
-
-	"github.com/charlie0129/batt/pkg/smc"
 )
 
-var (
-	preSleepLoopDelaySeconds  = 60
-	postSleepLoopDelaySeconds = 30
-)
+const postSleepLoopDelaySeconds = 30
 
-var (
-	lastWakeTime = time.Now()
-)
+var countDownEnableMaintainLoop *CountDownHandle
+
+func init() {
+	countDownEnableMaintainLoop = NewCountDown(func() { enableMaintainLoop.Store(true) }, postSleepLoopDelaySeconds)
+}
 
 //export canSystemSleepCallback
 func canSystemSleepCallback() {
@@ -37,32 +32,16 @@ func canSystemSleepCallback() {
 	*/
 	logrus.Debugln("received kIOMessageCanSystemSleep notification, idle sleep is about to kick in")
 
-	if !config.PreventIdleSleep {
-		logrus.Debugln("PreventIdleSleep is disabled, allow idle sleep")
-		C.AllowPowerChange()
-		return
-	}
-
 	// We won't allow idle sleep if the system has just waked up,
 	// because there may still be a maintain loop waiting (see the wg.Wait() in loop.go).
 	// So decisions may not be made yet. We need to wait.
 	// Actually, we wait the larger of preSleepLoopDelaySeconds and postSleepLoopDelaySeconds. This is not implemented yet.
-	if timeAfterWokenUp := time.Since(lastWakeTime); timeAfterWokenUp < time.Duration(preSleepLoopDelaySeconds)*time.Second {
-		logrus.Debugf("system has just waked up (%fs ago), deny idle sleep", timeAfterWokenUp.Seconds())
-		C.CancelPowerChange()
-		return
-	}
+	//if timeAfterWokenUp := time.Since(lastWakeTime); timeAfterWokenUp < time.Duration(preSleepLoopDelaySeconds)*time.Second {
+	//	logrus.Debugf("system has just waked up (%fs ago), deny idle sleep", timeAfterWokenUp.Seconds())
+	//	C.CancelPowerChange()
+	//	return
+	//}
 
-	// Run a loop immediately to update `maintainedChargingInProgress` variable.
-	maintainLoopInner(false)
-
-	if maintainedChargingInProgress {
-		logrus.Debugln("maintained charging is in progress, deny idle sleep")
-		C.CancelPowerChange()
-		return
-	}
-
-	logrus.Debugln("no maintained charging is in progress, allow idle sleep")
 	C.AllowPowerChange()
 }
 
@@ -77,47 +56,7 @@ func systemWillSleepCallback() {
 	*/
 	logrus.Debugln("received kIOMessageSystemWillSleep notification, system will go to sleep")
 
-	if !config.DisableChargingPreSleep {
-		logrus.Debugln("DisableChargingPreSleep is disabled, allow sleep")
-		C.AllowPowerChange()
-		return
-	}
-
-	// If charge limit is enabled (limit<100), no matter if maintained charging is in progress,
-	// we disable charging just before sleep.
-	// Previously, we only disabled charging if maintained charging was in progress. But we find
-	// out this is not required, because if there is no maintained charging in progress, disabling
-	// charging will not cause any problem.
-	// By always disabling charging before sleep (if charge limit is enabled), we can prevent
-	// some rare cases.
-	if config.Limit < 100 {
-		logrus.Infof("charge limit is enabled, disabling charging, and allowing sleep")
-		// Delay next loop to prevent charging to be re-enabled after we disabled it.
-		// macOS will wait 30s before going to sleep, there is a chance that a maintain loop is
-		// executed during that time and it enables charging.
-		// So we delay more than that, just to be sure.
-		// No need to prevent duplicated runs.
-		wg.Add(1)
-		go func() {
-			// Use sleep instead of time.After because when the computer sleeps, we
-			// actually want the sleep to prolong as well.
-			sleep(preSleepLoopDelaySeconds)
-			wg.Done()
-		}()
-		err := smcConn.DisableCharging()
-		if err != nil {
-			logrus.Errorf("DisableCharging failed: %v", err)
-			return
-		}
-		if config.ControlMagSafeLED {
-			err = smcConn.SetMagSafeLedState(smc.LEDOff)
-			if err != nil {
-				logrus.Errorf("SetMagSafeLedState failed: %v", err)
-			}
-		}
-	} else {
-		logrus.Debugln("no maintained charging is in progress, allow sleep")
-	}
+	enableMaintainLoop.Store(false)
 
 	C.AllowPowerChange()
 }
@@ -131,42 +70,11 @@ func systemWillPowerOnCallback() {
 func systemHasPoweredOnCallback() {
 	// System has finished waking up...
 	logrus.Debugln("received kIOMessageSystemHasPoweredOn notification, system has finished waking up")
-	lastWakeTime = time.Now()
 
-	if config.Limit < 100 {
-		logrus.Debugf("delaying next loop by %d seconds", postSleepLoopDelaySeconds)
-		wg.Add(1)
-		go func() {
-			if config.DisableChargingPreSleep && config.ControlMagSafeLED {
-				err := smcConn.SetMagSafeLedState(smc.LEDOff)
-				if err != nil {
-					logrus.Errorf("SetMagSafeLedState failed: %v", err)
-				}
-			}
+	// Trigger update, to check if we need to charge (will prevent sleep) and update MagSafe
+	maintainLoop()
 
-			// Use sleep instead of time.After because when the computer sleeps, we
-			// actually want the sleep to prolong as well.
-			sleep(postSleepLoopDelaySeconds)
-
-			wg.Done()
-		}()
-	}
-}
-
-// Use sleep instead of time.After or time.Sleep because when the computer sleeps, we
-// actually want the sleep to prolong as well.
-func sleep(seconds int) {
-	tl := 250 // ms
-	t := time.NewTicker(time.Duration(tl) * time.Millisecond)
-	ticksWanted := seconds * 1000 / tl
-	ticksElapsed := 0
-	for range t.C {
-		ticksElapsed++
-		if ticksElapsed > ticksWanted {
-			break
-		}
-	}
-	t.Stop()
+	countDownEnableMaintainLoop.ch <- struct{}{}
 }
 
 func listenNotifications() error {
