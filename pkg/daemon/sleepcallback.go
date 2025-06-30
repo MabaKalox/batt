@@ -137,11 +137,16 @@ func systemHasPoweredOnCallback() {
 		logrus.Debugf("delaying next loop by %d seconds", postSleepLoopDelaySeconds)
 		wg.Add(1)
 		go func() {
-			if conf.DisableChargingPreSleep() && conf.ControlMagSafeLED() {
-				err := smcConn.SetMagSafeLedState(smc.LEDOff)
-				if err != nil {
-					logrus.Errorf("SetMagSafeLedState failed: %v", err)
+			if conf.DisableChargingPreSleep() {
+				if conf.ControlMagSafeLED() {
+					err := smcConn.SetMagSafeLedState(smc.LEDOff)
+					if err != nil {
+						logrus.Errorf("SetMagSafeLedState failed: %v", err)
+					}
 				}
+			} else if conf.PreventSystemSleep() {
+				// Trigger update, to check if we need to charge (will prevent sleep) and update MagSafe
+				maintainLoopForced()
 			}
 
 			// Use sleep instead of time.After because when the computer sleeps, we
